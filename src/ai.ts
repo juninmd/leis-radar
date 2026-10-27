@@ -1,7 +1,13 @@
 import { env } from "./config/env.ts";
 
-/** Single-shot chat completion across providers. Returns plain text. */
+/** Single-shot chat completion across providers. Returns plain text; throws on empty. */
 export async function chat(system: string, user: string): Promise<string> {
+  const text = await dispatch(system, user);
+  if (!text) throw new Error("AI resposta vazia");
+  return text;
+}
+
+function dispatch(system: string, user: string): Promise<string> {
   switch (env.aiProvider) {
     case "anthropic":
       return anthropic(system, user);
@@ -46,7 +52,8 @@ async function openaiCompatible(
     }),
   });
   if (!res.ok) throw new Error(`AI ${res.status}: ${await res.text()}`);
-  const json = (await res.json()) as { choices: { message: { content: string } }[] };
+  const json = (await res.json()) as { choices?: { message?: { content?: string } }[] };
+  if (!Array.isArray(json.choices)) throw new Error("AI formato inesperado: openai");
   return json.choices[0]?.message?.content?.trim() ?? "";
 }
 
@@ -66,7 +73,8 @@ async function anthropic(system: string, user: string): Promise<string> {
     }),
   });
   if (!res.ok) throw new Error(`Anthropic ${res.status}: ${await res.text()}`);
-  const json = (await res.json()) as { content: { text: string }[] };
+  const json = (await res.json()) as { content?: { text?: string }[] };
+  if (!Array.isArray(json.content)) throw new Error("AI formato inesperado: anthropic");
   return json.content[0]?.text?.trim() ?? "";
 }
 
@@ -82,7 +90,8 @@ async function google(system: string, user: string): Promise<string> {
   });
   if (!res.ok) throw new Error(`Gemini ${res.status}: ${await res.text()}`);
   const json = (await res.json()) as {
-    candidates: { content: { parts: { text: string }[] } }[];
+    candidates?: { content?: { parts?: { text?: string }[] } }[];
   };
+  if (!Array.isArray(json.candidates)) throw new Error("AI formato inesperado: google");
   return json.candidates[0]?.content?.parts?.[0]?.text?.trim() ?? "";
 }
